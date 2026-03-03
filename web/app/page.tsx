@@ -10,6 +10,7 @@ import Minimap from "@/components/Minimap";
 import Toolbar from "@/components/Toolbar";
 import NotesSidebar from "@/components/NotesSidebar";
 import UserMenu from "@/components/UserMenu";
+import UploadToast from "@/components/UploadToast";
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -122,7 +123,7 @@ export default function Home() {
       <Minimap />
       <NotesSidebar />
       <UserMenu />
-
+      <UploadToast />
     </main>
   );
 }

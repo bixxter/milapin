@@ -1,4 +1,5 @@
 # Dependencies
+node_modules/
 web/node_modules/
 
 # Next.js
@@ -45,6 +46,9 @@ server/.env*
 
 # Logs
 *.log
+
+# Video project
+video/
 
 # Binary at root (legacy)
 milapin

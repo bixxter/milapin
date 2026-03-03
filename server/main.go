@@ -157,6 +157,58 @@ func recordMediaFile(ctx context.Context, userID, filename, r2Key, contentType, 
 }
 
 // ─────────────────────────────────────────────
+// VIDEO COMPRESSION
+// ─────────────────────────────────────────────
+
+const videoCompressionThreshold = 5 * 1024 * 1024 // 5 MB
+
+// compressVideo compresses a video file using ffmpeg if it exceeds the size threshold.
+// Returns the path to the (possibly compressed) file. Caller must clean up the returned path
+// if it differs from inputPath.
+func compressVideo(inputPath string) (string, error) {
+	stat, err := os.Stat(inputPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to stat input file: %w", err)
+	}
+
+	if stat.Size() <= videoCompressionThreshold {
+		log.Printf("Video %.1f MB <= 5 MB threshold, skipping compression", float64(stat.Size())/(1024*1024))
+		return inputPath, nil
+	}
+
+	log.Printf("Compressing video (%.1f MB)...", float64(stat.Size())/(1024*1024))
+
+	outputPath := inputPath + ".compressed.mp4"
+
+	cmd := exec.Command("ffmpeg",
+		"-i", inputPath,
+		"-vf", "scale='min(1280,iw)':-2",
+		"-c:v", "libx264", "-crf", "28", "-preset", "fast",
+		"-c:a", "aac", "-b:a", "128k",
+		"-movflags", "+faststart",
+		"-y",
+		outputPath,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		os.Remove(outputPath)
+		return "", fmt.Errorf("ffmpeg compression failed: %w\n%s", err, string(output))
+	}
+
+	compressedStat, err := os.Stat(outputPath)
+	if err != nil {
+		os.Remove(outputPath)
+		return "", fmt.Errorf("failed to stat compressed file: %w", err)
+	}
+
+	log.Printf("Compressed: %.1f MB → %.1f MB",
+		float64(stat.Size())/(1024*1024),
+		float64(compressedStat.Size())/(1024*1024))
+
+	return outputPath, nil
+}
+
+// ─────────────────────────────────────────────
 // CORS MIDDLEWARE
 // ─────────────────────────────────────────────
 
@@ -418,6 +470,22 @@ func grabHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer os.Remove(tmpPath) // Clean up temp file
 
+	// Step 2.5: Compress video if needed
+	if mediaType == "video" {
+		compressedPath, compErr := compressVideo(tmpPath)
+		if compErr != nil {
+			log.Printf("Video compression failed, uploading original: %v", compErr)
+		} else if compressedPath != tmpPath {
+			defer os.Remove(compressedPath)
+			tmpPath = compressedPath
+			contentType = "video/mp4"
+			// Update filename extension if needed
+			if !strings.HasSuffix(filename, ".mp4") {
+				filename = strings.TrimSuffix(filename, filepath.Ext(filename)) + ".mp4"
+			}
+		}
+	}
+
 	// Get file size
 	stat, err := os.Stat(tmpPath)
 	if err != nil {
@@ -460,6 +528,119 @@ func grabHandler(w http.ResponseWriter, r *http.Request) {
 		Success:  true,
 		MediaURL: mediaURL,
 		R2Key:    r2Key,
+	})
+}
+
+// ─────────────────────────────────────────────
+// COMPRESS-UPLOAD HANDLER (for Next.js proxy)
+// ─────────────────────────────────────────────
+
+type CompressUploadResponse struct {
+	R2Key       string `json:"r2_key"`
+	Filename    string `json:"filename"`
+	Size        int64  `json:"size"`
+	ContentType string `json:"content_type"`
+	Error       string `json:"error,omitempty"`
+}
+
+func compressUploadHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Authenticate
+	user, err := authenticateRequest(r)
+	if err != nil {
+		sendJSON(w, http.StatusUnauthorized, CompressUploadResponse{Error: err.Error()})
+		return
+	}
+
+	// Parse multipart form (max 50 MB in memory)
+	if err := r.ParseMultipartForm(50 << 20); err != nil {
+		sendJSON(w, http.StatusBadRequest, CompressUploadResponse{Error: "Failed to parse form: " + err.Error()})
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		sendJSON(w, http.StatusBadRequest, CompressUploadResponse{Error: "Missing file field"})
+		return
+	}
+	defer file.Close()
+
+	filename := r.FormValue("filename")
+	if filename == "" {
+		filename = header.Filename
+	}
+
+	// Save to temp file
+	ext := filepath.Ext(filename)
+	if ext == "" {
+		ext = ".mp4"
+	}
+	tmpFile, err := os.CreateTemp("", "upload-*"+ext)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, CompressUploadResponse{Error: "Failed to create temp file"})
+		return
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
+
+	if _, err := io.Copy(tmpFile, file); err != nil {
+		tmpFile.Close()
+		sendJSON(w, http.StatusInternalServerError, CompressUploadResponse{Error: "Failed to save uploaded file"})
+		return
+	}
+	tmpFile.Close()
+
+	// Compress
+	compressedPath, err := compressVideo(tmpPath)
+	if err != nil {
+		log.Printf("Compression failed, uploading original: %v", err)
+		compressedPath = tmpPath
+	}
+	if compressedPath != tmpPath {
+		defer os.Remove(compressedPath)
+	}
+
+	// After compression the file is always mp4
+	contentType := "video/mp4"
+	if compressedPath != tmpPath {
+		filename = strings.TrimSuffix(filename, filepath.Ext(filename)) + ".mp4"
+	}
+
+	// Get final file size
+	stat, err := os.Stat(compressedPath)
+	if err != nil {
+		sendJSON(w, http.StatusInternalServerError, CompressUploadResponse{Error: "Failed to stat file"})
+		return
+	}
+
+	// Upload to R2
+	ctx := r.Context()
+	r2Key, err := uploadToR2(ctx, compressedPath, user.ID, filename, contentType)
+	if err != nil {
+		log.Printf("Failed to upload to R2: %v", err)
+		sendJSON(w, http.StatusInternalServerError, CompressUploadResponse{Error: "Failed to upload to R2"})
+		return
+	}
+
+	// Record in DB
+	err = recordMediaFile(ctx, user.ID, filename, r2Key, contentType, "video", stat.Size(), "")
+	if err != nil {
+		log.Printf("Failed to record media file: %v", err)
+		sendJSON(w, http.StatusInternalServerError, CompressUploadResponse{Error: "Failed to record file"})
+		return
+	}
+
+	log.Printf("Compress-upload: %s (%.1f MB) for user %s", r2Key, float64(stat.Size())/(1024*1024), user.Email)
+
+	sendJSON(w, http.StatusOK, CompressUploadResponse{
+		R2Key:       r2Key,
+		Filename:    filename,
+		Size:        stat.Size(),
+		ContentType: contentType,
 	})
 }
 
@@ -507,6 +688,7 @@ func main() {
 
 	// Register routes
 	http.HandleFunc("/grab", withCORS(grabHandler))
+	http.HandleFunc("/compress-upload", withCORS(compressUploadHandler))
 
 	// Health check endpoint
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

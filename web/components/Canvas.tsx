@@ -5,6 +5,7 @@ import type { BoardItem } from "@/lib/types";
 import { useRef, useState, useCallback, useEffect } from "react";
 import CanvasItem from "./CanvasItem";
 import CommentPin from "./CommentPin";
+import { useUpload } from "@/lib/useUpload";
 
 export default function Canvas() {
   const camera = useStore((s) => s.camera);
@@ -24,6 +25,11 @@ export default function Canvas() {
   const addComment = useStore((s) => s.addComment);
   const setEditingCommentId = useStore((s) => s.setEditingCommentId);
   const setMarqueePreviewIds = useStore((s) => s.setMarqueePreviewIds);
+
+  const { upload } = useUpload();
+  const [fileDragOver, setFileDragOver] = useState(false);
+  const fileDragCounter = useRef(0);
+  const pendingDropPos = useRef<{ clientX: number; clientY: number } | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPanning, setIsPanning] = useState(false);
@@ -329,23 +335,32 @@ export default function Canvas() {
     [isPanning, activeTool, marquee, boardItems, camera, screenToCanvas, addBoardItem, setSelectedIds, setActiveTool, setMarqueePreviewIds]
   );
 
-  // Drop from sidebar
+  // Drop from sidebar or file system
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    fileDragCounter.current++;
+    setFileDragOver(true);
+  }, []);
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
   }, []);
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      const filename = e.dataTransfer.getData("text/plain");
-      if (!filename) return;
-      const file = mediaFiles.find((f) => f.filename === filename);
-      if (!file) return;
-      if (boardItems.some((i) => i.kind === "media" && i.filename === filename)) return;
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    fileDragCounter.current--;
+    if (fileDragCounter.current <= 0) {
+      fileDragCounter.current = 0;
+      setFileDragOver(false);
+    }
+  }, []);
 
-      const pos = screenToCanvas(e.clientX, e.clientY);
-      const src = `/api/media/${encodeURIComponent(filename)}`;
+  const placeMediaOnCanvas = useCallback(
+    (filename: string, mediaType: "image" | "video" | "gif", url: string, dropPos: { x: number; y: number }) => {
+      const src = url;
       const maxDim = 300;
 
       const createItem = (w: number, h: number) => {
@@ -356,15 +371,15 @@ export default function Canvas() {
           id: `${filename}-${Date.now()}`,
           kind: "media",
           filename,
-          x: pos.x - width / 2,
-          y: pos.y - height / 2,
+          x: dropPos.x - width / 2,
+          y: dropPos.y - height / 2,
           width,
           height,
         };
         addBoardItem(newItem);
       };
 
-      if (file.type === "video") {
+      if (mediaType === "video") {
         const video = document.createElement("video");
         video.src = src;
         video.onloadedmetadata = () => createItem(video.videoWidth, video.videoHeight);
@@ -376,7 +391,38 @@ export default function Canvas() {
         img.onerror = () => createItem(240, 180);
       }
     },
-    [mediaFiles, boardItems, screenToCanvas, addBoardItem]
+    [addBoardItem]
+  );
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      fileDragCounter.current = 0;
+      setFileDragOver(false);
+
+      // File drop from system
+      if (e.dataTransfer.files.length > 0 && !e.dataTransfer.getData("text/plain")) {
+        const pos = screenToCanvas(e.clientX, e.clientY);
+        const results = await upload(e.dataTransfer.files);
+        if (results) {
+          for (const mediaFile of results) {
+            placeMediaOnCanvas(mediaFile.filename, mediaFile.type, mediaFile.url, pos);
+          }
+        }
+        return;
+      }
+
+      // Card drop from sidebar
+      const filename = e.dataTransfer.getData("text/plain");
+      if (!filename) return;
+      const file = mediaFiles.find((f) => f.filename === filename);
+      if (!file) return;
+      if (boardItems.some((i) => i.kind === "media" && i.filename === filename)) return;
+
+      const pos = screenToCanvas(e.clientX, e.clientY);
+      placeMediaOnCanvas(filename, file.type, `/api/media/${encodeURIComponent(filename)}`, pos);
+    },
+    [mediaFiles, boardItems, screenToCanvas, upload, placeMediaOnCanvas]
   );
 
   const isDrawing = activeTool !== "select" && activeTool !== "comment";
@@ -398,7 +444,9 @@ export default function Canvas() {
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
+      onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {/* Transformed canvas layer */}
@@ -466,9 +514,16 @@ export default function Canvas() {
       )}
 
       {/* Drop indicator */}
-      {draggingFromSidebar && (
+      {(draggingFromSidebar || fileDragOver) && (
         <div className="fixed inset-0 pointer-events-none z-30">
           <div className="absolute inset-4 border-2 border-dashed border-[var(--color-accent)]/30 rounded-2xl" />
+          {fileDragOver && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-sm font-medium text-[var(--color-accent)] bg-[var(--color-surface-2)]/80 backdrop-blur-sm px-4 py-2 rounded-lg">
+                Drop files to upload
+              </span>
+            </div>
+          )}
         </div>
       )}
 

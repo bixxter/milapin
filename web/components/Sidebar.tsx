@@ -3,6 +3,7 @@
 import { useStore } from "@/lib/store";
 import type { MediaFile } from "@/lib/types";
 import { useRef, useState, useEffect } from "react";
+import { useUpload } from "@/lib/useUpload";
 
 function SidebarCard({ file }: { file: MediaFile }) {
   const setDragging = useStore((s) => s.setDraggingFromSidebar);
@@ -108,15 +109,54 @@ function SidebarCard({ file }: { file: MediaFile }) {
 
 const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.userAgent);
 
+
 export default function Sidebar() {
   const mediaFiles = useStore((s) => s.mediaFiles);
   const boardItems = useStore((s) => s.boardItems);
   const sidebarOpen = useStore((s) => s.sidebarOpen);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
+  const { upload } = useUpload();
+  const [fileDragOver, setFileDragOver] = useState(false);
+  const dragCounter = useRef(0);
 
   const unsortedFiles = mediaFiles.filter(
     (f) => !boardItems.some((b) => b.kind === "media" && b.filename === f.filename)
   );
+
+  const hasFiles = (e: React.DragEvent) =>
+    e.dataTransfer.types.includes("Files");
+
+  const handleFileDragEnter = (e: React.DragEvent) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragCounter.current++;
+    setFileDragOver(true);
+  };
+
+  const handleFileDragOver = (e: React.DragEvent) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleFileDragLeave = (e: React.DragEvent) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragCounter.current--;
+    if (dragCounter.current <= 0) {
+      dragCounter.current = 0;
+      setFileDragOver(false);
+    }
+  };
+
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current = 0;
+    setFileDragOver(false);
+    if (e.dataTransfer.files.length > 0) {
+      upload(e.dataTransfer.files);
+    }
+  };
 
   // Keyboard shortcut: Cmd/Ctrl + B
   useEffect(() => {
@@ -167,12 +207,17 @@ export default function Sidebar() {
 
       {/* Sidebar panel */}
       <aside
+        onDragEnter={handleFileDragEnter}
+        onDragOver={handleFileDragOver}
+        onDragLeave={handleFileDragLeave}
+        onDrop={handleFileDrop}
         className={`
           fixed top-0 left-0 h-full z-40 w-[280px]
           bg-[var(--color-surface-1)]/95 backdrop-blur-xl
           border-r border-[var(--color-border-default)]
           flex flex-col transition-transform duration-300 ease-out
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+          ${fileDragOver ? "ring-2 ring-inset ring-[var(--color-accent)]" : ""}
         `}
       >
         {/* Header */}
@@ -225,17 +270,50 @@ export default function Sidebar() {
                 No media files yet
               </p>
               <p className="text-[11px] text-[var(--color-text-tertiary)] mt-1 opacity-60">
-                Grab pins from Pinterest
+                Drop files or grab from Pinterest
               </p>
             </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="px-4 py-3 border-t border-[var(--color-border-subtle)]">
-          <div className="flex items-center gap-2 text-[11px] text-[var(--color-text-tertiary)]">
-            <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-pin-emerald)]" />
-            <span>{mediaFiles.length} files total</span>
+        {/* Drop overlay */}
+        {fileDragOver && (
+          <div className="absolute inset-0 z-50 bg-[var(--color-accent)]/5 flex items-center justify-center pointer-events-none">
+            <div className="text-sm font-medium text-[var(--color-accent)]">
+              Drop files to upload
+            </div>
+          </div>
+        )}
+
+        {/* Footer with usage bar */}
+        <div className="px-4 py-3 border-t border-[var(--color-border-subtle)] space-y-2">
+          <div className="flex items-center justify-between text-[11px] text-[var(--color-text-tertiary)]">
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-pin-emerald)]" />
+              <span>{mediaFiles.length} files</span>
+            </div>
+            <span>
+              {(() => {
+                const totalBytes = mediaFiles.reduce((sum, f) => sum + f.size, 0);
+                const mb = totalBytes / (1024 * 1024);
+                return mb < 1 ? `${(totalBytes / 1024).toFixed(0)} KB` : `${mb.toFixed(1)} MB`;
+              })()}{" "}
+              / 500 MB
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full bg-[var(--color-surface-3)] overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500 ease-out"
+              style={{
+                width: `${Math.min((mediaFiles.reduce((sum, f) => sum + f.size, 0) / (500 * 1024 * 1024)) * 100, 100)}%`,
+                backgroundColor:
+                  mediaFiles.reduce((sum, f) => sum + f.size, 0) / (500 * 1024 * 1024) > 0.9
+                    ? "var(--color-pin-rose)"
+                    : mediaFiles.reduce((sum, f) => sum + f.size, 0) / (500 * 1024 * 1024) > 0.7
+                      ? "var(--color-pin-amber, #f59e0b)"
+                      : "var(--color-pin-emerald)",
+              }}
+            />
           </div>
         </div>
       </aside>

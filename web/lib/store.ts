@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { MediaFile, BoardItem, Point, Tool, Comment } from "./types";
+import type { UploadProgress } from "./useUpload";
 
 type HistorySnapshot = { boardItems: BoardItem[]; comments: Comment[] };
 
@@ -8,6 +9,11 @@ interface AppState {
   mediaFiles: MediaFile[];
   setMediaFiles: (files: MediaFile[]) => void;
   removeMediaFile: (filename: string) => void;
+
+  // Upload progress (shared across sidebar + canvas)
+  uploadProgress: UploadProgress[];
+  setUploadProgress: (updater: UploadProgress[] | ((prev: UploadProgress[]) => UploadProgress[])) => void;
+  dismissUploadError: (index: number) => void;
 
   // Board items (placed on canvas)
   boardItems: BoardItem[];
@@ -75,6 +81,16 @@ export const useStore = create<AppState>((set) => ({
   removeMediaFile: (filename) =>
     set((s) => ({
       mediaFiles: s.mediaFiles.filter((f) => f.filename !== filename),
+    })),
+
+  uploadProgress: [],
+  setUploadProgress: (updater) =>
+    set((s) => ({
+      uploadProgress: typeof updater === "function" ? updater(s.uploadProgress) : updater,
+    })),
+  dismissUploadError: (index) =>
+    set((s) => ({
+      uploadProgress: s.uploadProgress.filter((_, i) => i !== index),
     })),
 
   boardItems: [],
