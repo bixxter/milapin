@@ -1,0 +1,13 @@
+{$DOMAIN:localhost} {
+	handle /grab {
+		reverse_proxy server:8080
+	}
+
+	handle /health {
+		reverse_proxy server:8080
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Pinterest Grabber",
+  "version": "1.1.0",
+  "description": "Add a grab button to Pinterest pins",
+  "permissions": ["activeTab", "storage"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": ["*://*.pinterest.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

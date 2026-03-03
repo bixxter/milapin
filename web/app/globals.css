@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "Geist";
+  src: url("https://cdn.jsdelivr.net/fontsource/fonts/geist-sans@latest/latin-400-normal.woff2")
+    format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist";
+  src: url("https://cdn.jsdelivr.net/fontsource/fonts/geist-sans@latest/latin-500-normal.woff2")
+    format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist";
+  src: url("https://cdn.jsdelivr.net/fontsource/fonts/geist-sans@latest/latin-600-normal.woff2")
+    format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("https://cdn.jsdelivr.net/fontsource/fonts/geist-mono@latest/latin-400-normal.woff2")
+    format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: "Geist", system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+
+  --color-surface-0: #0a0a0b;
+  --color-surface-1: #111113;
+  --color-surface-2: #1a1a1e;
+  --color-surface-3: #232328;
+  --color-surface-4: #2c2c33;
+
+  --color-border-subtle: #ffffff08;
+  --color-border-default: #ffffff12;
+  --color-border-strong: #ffffff20;
+  --color-border-accent: #6366f1;
+
+  --color-text-primary: #e8e8ed;
+  --color-text-secondary: #8b8b9e;
+  --color-text-tertiary: #5a5a6e;
+
+  --color-accent: #6366f1;
+  --color-accent-hover: #818cf8;
+  --color-accent-muted: #6366f120;
+
+  --color-pin-rose: #f43f5e;
+  --color-pin-amber: #f59e0b;
+  --color-pin-emerald: #10b981;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-surface-0);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-4);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-tertiary);
+}
+
+/* Canvas dot grid */
+.canvas-grid {
+  background-image: radial-gradient(
+    circle,
+    var(--color-border-subtle) 1px,
+    transparent 1px
+  );
+  background-size: 24px 24px;
+}
+
+/* Drag ghost */
+.dragging {
+  opacity: 0.6;
+}
+
+/* Selection marquee */
+.marquee {
+  border: 1px solid var(--color-accent);
+  background: var(--color-accent-muted);
+  pointer-events: none;
+}

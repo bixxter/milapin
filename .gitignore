@@ -1,0 +1,50 @@
+# Dependencies
+web/node_modules/
+
+# Next.js
+web/.next/
+web/out/
+
+# Build
+server/milapin
+
+# Downloads
+downloads/
+
+# Board state (local data)
+web/board-state.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Env
+.env
+.env.local
+.env.*
+web/.env*
+server/.env*
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# SSH/Credentials
+*.pem
+*.key
+
+# Build cache
+*.tsbuildinfo
+
+# Logs
+*.log
+
+# Binary at root (legacy)
+milapin
