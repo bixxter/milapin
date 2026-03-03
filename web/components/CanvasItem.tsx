@@ -45,6 +45,7 @@ function MediaContent({ item, hovered }: { item: BoardItem & { kind: "media" }; 
           src={src}
           muted
           loop
+          playsInline
           className="w-full h-full object-cover pointer-events-none"
         />
       ) : (
