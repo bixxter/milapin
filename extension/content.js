@@ -1,19 +1,15 @@
 // ─────────────────────────────────────────────
-// Load settings from chrome.storage.sync
+// Config
 // ─────────────────────────────────────────────
-let backendUrl = "";
+const BACKEND_URL = "https://board.bixxter.com";
 let apiKey = "";
 
-chrome.storage.sync.get(["backendUrl", "apiKey"], (data) => {
-  backendUrl = data.backendUrl || "";
+chrome.storage.sync.get(["apiKey"], (data) => {
   apiKey = data.apiKey || "";
-  // Inject buttons now that settings are loaded
   injectButtonsIntoPins();
 });
 
-// Listen for settings changes
 chrome.storage.onChanged.addListener((changes) => {
-  if (changes.backendUrl) backendUrl = changes.backendUrl.newValue || "";
   if (changes.apiKey) apiKey = changes.apiKey.newValue || "";
 });
 
@@ -25,7 +21,7 @@ function createGrabButton(pinUrl) {
   const btn = document.createElement("button");
   btn.className = "pg-grab-btn";
 
-  if (!backendUrl || !apiKey) {
+  if (!apiKey) {
     btn.innerText = "Setup needed";
     btn.title = "Open extension options to configure";
     btn.addEventListener("click", (e) => {
@@ -47,7 +43,7 @@ function createGrabButton(pinUrl) {
     btn.disabled = true;
 
     try {
-      const response = await fetch(`${backendUrl}/grab`, {
+      const response = await fetch(`${BACKEND_URL}/grab`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

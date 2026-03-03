@@ -52,3 +52,7 @@ video/
 
 # Binary at root (legacy)
 milapin
+
+CLAUDE.md
+docs/
+extension/*.zip
