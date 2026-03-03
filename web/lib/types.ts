@@ -75,6 +75,7 @@ export interface BoardState {
   items: BoardItem[];
   comments?: Comment[];
   notes?: string;
+  camera?: { x: number; y: number; zoom: number };
 }
 
 export interface Point {

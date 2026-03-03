@@ -22,6 +22,8 @@ export default function Home() {
   const setComments = useStore((s) => s.setComments);
   const notes = useStore((s) => s.notes);
   const setNotes = useStore((s) => s.setNotes);
+  const camera = useStore((s) => s.camera);
+  const setCamera = useStore((s) => s.setCamera);
   const prevBoardRef = useRef<string>("");
   const [ready, setReady] = useState(false);
 
@@ -55,6 +57,9 @@ export default function Home() {
         if (boardData.notes) {
           setNotes(boardData.notes);
         }
+        if (boardData.camera) {
+          setCamera(boardData.camera);
+        }
         setMediaFiles(mediaData.files || []);
       } catch (err) {
         console.error("Failed to init:", err);
@@ -67,7 +72,7 @@ export default function Home() {
 
   // Save board state (debounced)
   const saveBoard = useCallback(async () => {
-    const current = JSON.stringify({ items: boardItems, comments, notes });
+    const current = JSON.stringify({ items: boardItems, comments, notes, camera });
     if (current === prevBoardRef.current) return;
     prevBoardRef.current = current;
 
@@ -75,12 +80,12 @@ export default function Home() {
       await fetch("/api/board", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: boardItems, comments, notes }),
+        body: JSON.stringify({ items: boardItems, comments, notes, camera }),
       });
     } catch (err) {
       console.error("Failed to save board:", err);
     }
-  }, [boardItems, comments, notes]);
+  }, [boardItems, comments, notes, camera]);
 
   // Poll for new media every 3 seconds (only after initial load)
   useEffect(() => {
