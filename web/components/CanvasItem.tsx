@@ -6,23 +6,36 @@ import { useRef, useState, useCallback, useEffect } from "react";
 
 type ResizeHandle = "nw" | "ne" | "sw" | "se";
 
+function useIsTouchScreen() {
+  const [isTouch, setIsTouch] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1024px) and (pointer: coarse)");
+    setIsTouch(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsTouch(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return isTouch;
+}
+
 function MediaContent({ item, hovered }: { item: BoardItem & { kind: "media" }; hovered: boolean }) {
   const mediaFiles = useStore((s) => s.mediaFiles);
   const file = mediaFiles.find((f) => f.filename === item.filename);
   const isVideo = file?.type === "video";
   const src = file?.url ?? `/api/media/${encodeURIComponent(item.filename)}`;
   const videoRef = useRef<HTMLVideoElement>(null);
+  const isTouchScreen = useIsTouchScreen();
 
   useEffect(() => {
     if (!isVideo || !videoRef.current) return;
     const video = videoRef.current;
-    if (hovered) {
+    if (isTouchScreen || hovered) {
       video.play().catch(() => {});
     } else {
       video.pause();
       video.currentTime = 0;
     }
-  }, [hovered, isVideo]);
+  }, [hovered, isVideo, isTouchScreen]);
 
   return (
     <>
@@ -40,7 +53,7 @@ function MediaContent({ item, hovered }: { item: BoardItem & { kind: "media" }; 
       <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
         <p className="text-[10px] font-mono text-white/70 truncate">{item.filename}</p>
       </div>
-      {isVideo && !hovered && (
+      {isVideo && !isTouchScreen && !hovered && (
         <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-black/50 flex items-center justify-center pointer-events-none">
           <svg width="7" height="8" viewBox="0 0 7 8" fill="none"><path d="M0 0L7 4L0 8V0Z" fill="white" fillOpacity="0.7" /></svg>
         </div>

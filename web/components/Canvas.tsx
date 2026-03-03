@@ -111,6 +111,115 @@ export default function Canvas() {
     return () => el.removeEventListener("wheel", onWheel);
   }, [camera.zoom, zoomTo, pan]);
 
+  // Touch events — pan with one finger, pinch-zoom with two fingers
+  const touchRef = useRef<{
+    mode: "none" | "pan" | "pinch";
+    startX: number;
+    startY: number;
+    cx: number;
+    cy: number;
+    // pinch state
+    startDist: number;
+    startZoom: number;
+    midX: number;
+    midY: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const dist = (a: Touch, b: Touch) =>
+      Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const [a, b] = [e.touches[0], e.touches[1]];
+        const cam = useStore.getState().camera;
+        touchRef.current = {
+          mode: "pinch",
+          startX: 0, startY: 0,
+          cx: cam.x, cy: cam.y,
+          startDist: dist(a, b),
+          startZoom: cam.zoom,
+          midX: (a.clientX + b.clientX) / 2,
+          midY: (a.clientY + b.clientY) / 2,
+        };
+      } else if (e.touches.length === 1) {
+        const cam = useStore.getState().camera;
+        touchRef.current = {
+          mode: "pan",
+          startX: e.touches[0].clientX,
+          startY: e.touches[0].clientY,
+          cx: cam.x, cy: cam.y,
+          startDist: 0, startZoom: cam.zoom,
+          midX: 0, midY: 0,
+        };
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!touchRef.current) return;
+
+      if (touchRef.current.mode === "pinch" && e.touches.length === 2) {
+        e.preventDefault();
+        const [a, b] = [e.touches[0], e.touches[1]];
+        const curDist = dist(a, b);
+        const scale = curDist / touchRef.current.startDist;
+        const newZoom = touchRef.current.startZoom * scale;
+
+        // Zoom toward the midpoint of the two fingers
+        const midX = (a.clientX + b.clientX) / 2;
+        const midY = (a.clientY + b.clientY) / 2;
+        useStore.getState().zoomTo(newZoom, { x: midX, y: midY });
+      } else if (touchRef.current.mode === "pan" && e.touches.length === 1) {
+        // Only pan on canvas background when using select tool
+        const state = useStore.getState();
+        if (state.activeTool !== "select") return;
+
+        const dx = e.touches[0].clientX - touchRef.current.startX;
+        const dy = e.touches[0].clientY - touchRef.current.startY;
+        useStore.setState({
+          camera: {
+            ...state.camera,
+            x: touchRef.current.cx + dx,
+            y: touchRef.current.cy + dy,
+          },
+        });
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      // If went from 2 fingers to 1, reset to pan with remaining finger
+      if (touchRef.current?.mode === "pinch" && e.touches.length === 1) {
+        const cam = useStore.getState().camera;
+        touchRef.current = {
+          mode: "pan",
+          startX: e.touches[0].clientX,
+          startY: e.touches[0].clientY,
+          cx: cam.x, cy: cam.y,
+          startDist: 0, startZoom: cam.zoom,
+          midX: 0, midY: 0,
+        };
+        return;
+      }
+      if (e.touches.length === 0) {
+        touchRef.current = null;
+      }
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd);
+
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+    };
+  }, []);
+
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       // Middle-click or space+left-click = pan
@@ -440,7 +549,7 @@ export default function Canvas() {
     <div
       ref={containerRef}
       className={`fixed inset-0 overflow-hidden canvas-grid ${cursorClass} transition-[padding-left] duration-300`}
-      style={{ paddingLeft: sidebarOpen ? 280 : 0 }}
+      style={{ paddingLeft: sidebarOpen ? 280 : 0, touchAction: "none" }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
